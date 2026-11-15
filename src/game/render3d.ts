@@ -316,6 +316,7 @@ export class Scene3D {
     this.playerShadow = this.addContactShadow(this.scene,2.3,4.6);
     this.sunShadow = this.addContactShadow(this.scene,2.9,5.5); this.sunShadow.position.y=.016;
     this.wing = car.getObjectByName("active-wing");
+    this.steeringWheel = car.getObjectByName("steering-wheel") ?? null;
     this.wingBaseY = this.wing?.position.y ?? 0;
     this.wingRise = 0.14;
     this.player = car; this.scene.add(car);
