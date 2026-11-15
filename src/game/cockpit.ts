@@ -11,14 +11,15 @@ export type CockpitSeat = {
 };
 
 // Tuned from in-cabin renders. Left out: SVJ and Demon (no usable cabin in
-// the file) and Chiron Super Sport 300+ (its file measures off-scale).
+// the file).
 export const COCKPIT_SEATS: Partial<Record<PlayerCar, CockpitSeat>> = {
   revuelto: { eye: [-0.26, 0.98, 0.12] },
   "huracan-evo": { eye: [-0.36, 0.98, 0.1] },
   laferrari: { eye: [-0.33, 0.96, 0.1] },
   chiron: { eye: [-0.38, 1.02, 0.1] },
   tourbillon: { eye: [-0.38, 1.0, 0.1] },
-  "voiture-noire": { eye: [-0.36, 0.97, 0.05] },
+  "voiture-noire": { eye: [-0.36, 1.0, 0.2] },
+  "chiron-ss300": { eye: [-0.38, 0.97, 0.03] },
   jesko: { eye: [-0.31, 0.93, 0.08] },
   "utopia-roadster": { eye: [-0.33, 1.0, 0.15] },
   huayra: { eye: [-0.4, 1.0, 0.15] },

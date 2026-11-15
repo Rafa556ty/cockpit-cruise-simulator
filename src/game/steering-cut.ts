@@ -8,6 +8,8 @@ export type Vec3 = [number, number, number];
 /** Where a steering wheel can sit relative to the driver's eyes. */
 const ZONE = { x: 0.34, yLow: -0.7, yHigh: 0.05, zNear: -0.12, zFar: -1.0 };
 /** Plausible rim: 28–46 cm across, centred near the driver's line. */
+/** Outer radius of a rim cut out around its hub (m). */
+const ANNULUS_OUTER = 0.205;
 const RIM = { min: 0.27, max: 0.47, offCentre: 0.14, maxDepth: 0.24, slice: 0.2 };
 
 type Tri = { mesh: number; tri: number };
@@ -135,7 +137,7 @@ export function findSteeringWheel(
     const score = (ring / (v.length / 3)) * Math.log(ids.length);
     if (ring / (v.length / 3) > 0.45 && (!rim || score > rim.score)) rim = { ids, v, score };
   }
-  if (!rim) return null;
+  if (!rim) return annulusCut(tris, meshes, comps, vertsOf, boxOf, eye);
 
   // 4. Pieces lying on the rim's plane inside its circle (spokes, hub, badge, buttons).
   const pca = wheelAxle(rim.v);
@@ -167,4 +169,54 @@ export function findSteeringWheel(
     list.push(tri);
   }
   return { tris: out, axis: [ax, ay, az], center: [c[0]!, c[1]!, c[2]!] };
+}
+
+/**
+ * Fallback for a rim welded into the dashboard mesh (Tourbillon): find the
+ * hub the rim turns around, then cut the ring of triangles around it on the
+ * column's plane. The hub itself stays put, like a fixed-centre wheel.
+ */
+function annulusCut(
+  tris: Tri[],
+  meshes: ArrayLike<number>[],
+  comps: Map<number, number[]>,
+  vertsOf: (ids: number[]) => Float32Array,
+  boxOf: (v: Float32Array) => { mn: number[]; mx: number[] },
+  eye: Vec3,
+): WheelCut | null {
+  const [ex, ey, ez] = eye;
+  let hub: { c: number[]; r: number; n: number } | null = null;
+  for (const ids of comps.values()) {
+    if (ids.length < 200) continue;
+    const { mn, mx } = boxOf(vertsOf(ids));
+    const w = mx[0]! - mn[0]!, h = mx[1]! - mn[1]!;
+    const c = [(mn[0]! + mx[0]!) / 2, (mn[1]! + mx[1]!) / 2, (mn[2]! + mx[2]!) / 2];
+    if (w < 0.1 || w > 0.26 || h < 0.1 || h > 0.26) continue;
+    if (Math.abs(c[0]! - ex) > 0.1 || c[1]! > ey - 0.12 || c[1]! < ey - 0.45) continue;
+    if (c[2]! > ez - 0.3 || c[2]! < ez - 0.8) continue;
+    if (!hub || ids.length > hub.n) hub = { c, r: Math.max(w, h) / 2, n: ids.length };
+  }
+  if (!hub) return null;
+  const axis: Vec3 = [0, Math.sin(DEFAULT_COLUMN_TILT), Math.cos(DEFAULT_COLUMN_TILT)];
+  const inner = hub.r * 0.95, outer = ANNULUS_OUTER;
+  const out = new Map<number, number[]>();
+  let count = 0;
+  for (const { mesh, tri } of tris) {
+    const p = meshes[mesh]!;
+    let ok = true;
+    for (let k = 0; k < 3 && ok; k++) {
+      const o = tri * 9 + k * 3;
+      const d = [p[o]! - hub.c[0]!, p[o + 1]! - hub.c[1]!, p[o + 2]! - hub.c[2]!];
+      const along = d[0]! * axis[0] + d[1]! * axis[1] + d[2]! * axis[2];
+      const radial = Math.sqrt(Math.max(0, d[0]! ** 2 + d[1]! ** 2 + d[2]! ** 2 - along * along));
+      ok = Math.abs(along) < 0.06 && radial > inner && radial < outer;
+    }
+    if (!ok) continue;
+    let list = out.get(mesh);
+    if (!list) out.set(mesh, (list = []));
+    list.push(tri);
+    count++;
+  }
+  if (count < 60) return null;
+  return { tris: out, axis, center: [hub.c[0]!, hub.c[1]!, hub.c[2]!] };
 }
