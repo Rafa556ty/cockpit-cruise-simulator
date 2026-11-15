@@ -26,7 +26,8 @@ export const HEAD = {
   LAT_PER_G: 0.045, // m of sideways sway per g
   LONG_PER_G: 0.045, // m of fore/aft sway per g
   MAX_LAT: 0.07,
-  MAX_LONG: 0.06,
+  MAX_LONG: 0.06, // forward lunge under braking
+  MAX_BACK: 0.012, // the headrest stops the head going back under acceleration
   LOOK_INTO_TURN: 0.16, // rad of glance at full steer
   LOOK_RATE: 4.5, // how fast the eyes follow (1/s)
   TILT_PER_M: 0.9, // rad of head tilt per metre of sway
@@ -60,11 +61,12 @@ export function stepHeadMotion(h: HeadMotion, i: HeadInput): HeadMotion {
   // Turning right throws the head left (-x); braking throws it forward (-z).
   const tx = clamp(-latG * HEAD.LAT_PER_G, -HEAD.MAX_LAT, HEAD.MAX_LAT);
   // longG < 0 (braking) → tz < 0 (forward); longG > 0 (accel) → tz > 0 (pressed back).
-  const tz = clamp(longG * HEAD.LONG_PER_G, -HEAD.MAX_LONG, HEAD.MAX_LONG);
+  const tz = clamp(longG * HEAD.LONG_PER_G, -HEAD.MAX_LONG, HEAD.MAX_BACK);
   const vx = h.vx + (HEAD.STIFF * (tx - h.x) - HEAD.DAMP * h.vx) * dt;
   const vz = h.vz + (HEAD.STIFF * (tz - h.z) - HEAD.DAMP * h.vz) * dt;
   const x = h.x + vx * dt;
-  const z = h.z + vz * dt;
+  // Hard stop at the headrest: the spring can't overshoot into the seat.
+  const z = Math.min(HEAD.MAX_BACK, h.z + vz * dt);
 
   // Seat bounce: road buzz grows with speed, shake adds a sharper jolt.
   const t = h.t + dt;
