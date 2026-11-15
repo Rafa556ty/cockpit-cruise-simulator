@@ -9,7 +9,9 @@ import { isolateActiveWing } from "./active-wing";
 import { blackOutBmwWindow } from "./bmw-windows";
 import { fixSvj } from "./svj-fix";
 import { poseWheelCorners, wheelAxle } from "./wheel-corners";
-import { isSteeringPart } from "./cockpit";
+import { COCKPIT_SEATS, isSteeringPart } from "./cockpit";
+import { findSteeringWheel } from "./steering-cut";
+import type { PlayerCar } from "./player-cars";
 export { normalizeCar } from "./normalize-car";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
@@ -597,6 +599,65 @@ function buildSteeringWheel(parts: THREE.Mesh[]): THREE.Group {
   return group;
 }
 
+/** The CSR2 Chiron Super Sport file ships a 13.6 m display plane under the car; it set the scale. */
+function dropGroundPlane(scene: THREE.Object3D) {
+  const planes: THREE.Object3D[] = [];
+  scene.traverse((o) => {
+    if (/^Plane(_|$)/.test(o.name)) planes.push(o);
+  });
+  for (const p of planes) p.removeFromParent();
+}
+
+/** Copy the listed triangles (non-indexed geometry) into a new geometry. */
+function pickTriangles(geo: THREE.BufferGeometry, tris: number[]): THREE.BufferGeometry {
+  const out = new THREE.BufferGeometry();
+  for (const [name, attr] of Object.entries(geo.attributes)) {
+    const a = attr as THREE.BufferAttribute;
+    const size = a.itemSize;
+    const arr = new Float32Array(tris.length * 3 * size);
+    tris.forEach((t, n) => {
+      for (let k = 0; k < 3 * size; k++) arr[n * 3 * size + k] = a.getComponent(t * 3 + Math.floor(k / size), k % size);
+    });
+    out.setAttribute(name, new THREE.BufferAttribute(arr, size));
+  }
+  return out;
+}
+
+/**
+ * Cockpit cars whose steering wheel is baked into the dashboard mesh: find the
+ * rim in front of the driver, cut it (and its spokes/hub) out into its own
+ * pivoted "steering-wheel" group so the cockpit view can turn it.
+ */
+function cutBakedSteeringWheel(car: THREE.Group, key: ModelKey) {
+  const seat = COCKPIT_SEATS[key as PlayerCar];
+  if (!seat || car.getObjectByName("steering-wheel")) return;
+  const meshes: THREE.Mesh[] = [];
+  for (const o of car.children) {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || m.userData["wheel"] || Array.isArray(m.material) || m.geometry.index) continue;
+    if (m.position.lengthSq() > 0 || (m.material as THREE.Material).transparent) continue;
+    meshes.push(m);
+  }
+  const found = findSteeringWheel(
+    meshes.map((m) => m.geometry.getAttribute("position").array),
+    seat.eye,
+  );
+  if (!found) return;
+  const parts: THREE.Mesh[] = [];
+  for (const [i, tris] of found) {
+    const mesh = meshes[i]!;
+    const geo = mesh.geometry;
+    const cut = new Set(tris);
+    const total = geo.getAttribute("position").count / 3;
+    const keep: number[] = [];
+    for (let t = 0; t < total; t++) if (!cut.has(t)) keep.push(t);
+    parts.push(new THREE.Mesh(pickTriangles(geo, tris), mesh.material));
+    mesh.geometry = pickTriangles(geo, keep);
+    geo.dispose();
+  }
+  car.add(buildSteeringWheel(parts));
+}
+
 /**
  * The Chiron's rear wing (materials prefixed "Wing_" by the optimiser) is
  * batched on its own and parented to an "active-wing" group whose origin is
@@ -762,6 +823,7 @@ export function loadCar(key: ModelKey): Promise<THREE.Group> {
           );
         // Revuelto wheels (tyre, rim, rotor, logo) stay unmerged so they can
         // spin; the caliper is bolted to the upright and does not turn.
+        if (key === "chiron-ss300") dropGroundPlane(scene);
         const normalized = normalizeCar(scene, spec);
         if (key === "svj") fixSvj(normalized);
         const result = batchCar(
@@ -774,6 +836,7 @@ export function loadCar(key: ModelKey): Promise<THREE.Group> {
           (o) => isSteeringPart(key, `${o.name}|${o.parent?.name ?? ""}`, (o.material as THREE.Material).name || ""),
         );
         if (key === "revuelto") isolateActiveWing(result);
+        cutBakedSteeringWheel(result, key);
         // The SVJ file ships its front wheels pre-steered; multi-part wheels share one hub.
         if (SHARED_HUB_KEYS.has(key)) poseWheelCorners(result, { straighten: key === "svj" });
         return result;
