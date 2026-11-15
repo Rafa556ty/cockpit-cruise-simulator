@@ -8,7 +8,7 @@ export type Vec3 = [number, number, number];
 /** Where a steering wheel can sit relative to the driver's eyes. */
 const ZONE = { x: 0.34, yLow: -0.7, yHigh: 0.05, zNear: -0.12, zFar: -1.0 };
 /** Plausible rim: 28–46 cm across, centred near the driver's line. */
-const RIM = { min: 0.27, max: 0.47, offCentre: 0.14, maxDepth: 0.24 };
+const RIM = { min: 0.27, max: 0.47, offCentre: 0.14, maxDepth: 0.24, slice: 0.2 };
 
 type Tri = { mesh: number; tri: number };
 
@@ -100,10 +100,23 @@ export function findSteeringWheel(
 
   // 3. The rim: a piece about a wheel across (x) and tall (y), in front of the driver.
   let rim: { ids: number[]; v: Float32Array; score: number } | null = null;
-  for (const ids of comps.values()) {
-    if (ids.length < 24) continue;
-    const v = vertsOf(ids);
-    const { mn, mx } = boxOf(v);
+  for (const whole of comps.values()) {
+    if (whole.length < 24) continue;
+    let ids = whole;
+    let v = vertsOf(ids);
+    let { mn, mx } = boxOf(v);
+    if (mx[2]! - mn[2]! > RIM.maxDepth) {
+      // Rim welded to its column: keep the driver-side slice where the rim sits.
+      const cutZ = mx[2]! - RIM.slice;
+      ids = ids.filter((id) => {
+        const { mesh, tri } = tris[id]!;
+        const p = meshes[mesh]!;
+        return p[tri * 9 + 2]! > cutZ && p[tri * 9 + 5]! > cutZ && p[tri * 9 + 8]! > cutZ;
+      });
+      if (ids.length < 24) continue;
+      v = vertsOf(ids);
+      ({ mn, mx } = boxOf(v));
+    }
     const w = mx[0]! - mn[0]!, h = mx[1]! - mn[1]!;
     debug?.push({ n: ids.length, mn: mn.map((x) => +x.toFixed(3)), mx: mx.map((x) => +x.toFixed(3)) });
     const cx = (mn[0]! + mx[0]!) / 2;
@@ -140,8 +153,9 @@ export function findSteeringWheel(
     return true;
   };
   const chosen: number[] = [...rim.ids];
+  const inRim = new Set(rim.ids);
   for (const ids of comps.values()) {
-    if (ids === rim.ids) continue;
+    if (inRim.has(ids[0]!) || ids.some((id) => inRim.has(id))) continue;
     if (fits(vertsOf(ids))) chosen.push(...ids);
   }
   const out = new Map<number, number[]>();
