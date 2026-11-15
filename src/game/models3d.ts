@@ -10,7 +10,7 @@ import { blackOutBmwWindow } from "./bmw-windows";
 import { fixSvj } from "./svj-fix";
 import { poseWheelCorners, wheelAxle } from "./wheel-corners";
 import { COCKPIT_SEATS, isSteeringPart } from "./cockpit";
-import { findSteeringWheel } from "./steering-cut";
+import { columnAxis, findSteeringWheel } from "./steering-cut";
 import type { PlayerCar } from "./player-cars";
 export { normalizeCar } from "./normalize-car";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
@@ -574,7 +574,7 @@ function batchCar(
  * One "steering-wheel" group pivoted on the rim's centre, so the cockpit view
  * can turn it about its own column (`userData.axis`, pointing at the driver).
  */
-function buildSteeringWheel(parts: THREE.Mesh[]): THREE.Group {
+function buildSteeringWheel(parts: THREE.Mesh[], knownAxis?: THREE.Vector3): THREE.Group {
   const box = new THREE.Box3();
   for (const p of parts) {
     p.geometry.computeBoundingBox();
@@ -584,8 +584,8 @@ function buildSteeringWheel(parts: THREE.Mesh[]): THREE.Group {
   const biggest = parts.reduce((a, b) =>
     b.geometry.getAttribute("position").count > a.geometry.getAttribute("position").count ? b : a,
   );
-  const axis = wheelAxle(biggest.geometry.getAttribute("position").array);
-  if (axis.z < 0) axis.negate();
+  const pca = wheelAxle(biggest.geometry.getAttribute("position").array);
+  const axis = knownAxis ?? new THREE.Vector3(...columnAxis([pca.x, pca.y, pca.z]));
   const group = new THREE.Group();
   group.name = "steering-wheel";
   group.position.copy(center);
@@ -644,7 +644,7 @@ function cutBakedSteeringWheel(car: THREE.Group, key: ModelKey) {
   );
   if (!found) return;
   const parts: THREE.Mesh[] = [];
-  for (const [i, tris] of found) {
+  for (const [i, tris] of found.tris) {
     const mesh = meshes[i]!;
     const geo = mesh.geometry;
     const cut = new Set(tris);
@@ -655,7 +655,7 @@ function cutBakedSteeringWheel(car: THREE.Group, key: ModelKey) {
     mesh.geometry = pickTriangles(geo, keep);
     geo.dispose();
   }
-  car.add(buildSteeringWheel(parts));
+  car.add(buildSteeringWheel(parts, new THREE.Vector3(...found.axis)));
 }
 
 /**

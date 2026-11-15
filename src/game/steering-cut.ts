@@ -16,7 +16,25 @@ type Tri = { mesh: number; tri: number };
  * `meshes` holds non-indexed xyz triplets per mesh (3 vertices per triangle).
  * Returns the triangles of the wheel per mesh index, or null when no rim is found.
  */
-export function findSteeringWheel(meshes: ArrayLike<number>[], eye: Vec3): Map<number, number[]> | null {
+export type WheelCut = { tris: Map<number, number[]>; axis: Vec3 };
+
+/** Column axis (towards the driver) used when the rim's own plane is unclear. */
+export const DEFAULT_COLUMN_TILT = 0.36; // rad from horizontal
+
+/** A column points at the driver, tilted 5–45° up; anything else is a bad fit. */
+export function columnAxis(pca: Vec3): Vec3 {
+  let [x, y, z] = pca;
+  if (z < 0) [x, y, z] = [-x, -y, -z];
+  const ok = Math.abs(x) < 0.25 && z > 0.7 && y > 0.05 && y < 0.72;
+  if (ok) return [x, y, z];
+  return [0, Math.sin(DEFAULT_COLUMN_TILT), Math.cos(DEFAULT_COLUMN_TILT)];
+}
+
+export function findSteeringWheel(
+  meshes: ArrayLike<number>[],
+  eye: Vec3,
+  debug?: unknown[],
+): WheelCut | null {
   const [ex, ey, ez] = eye;
   const inZone = (x: number, y: number, z: number) =>
     Math.abs(x - ex) < ZONE.x && y > ey + ZONE.yLow && y < ey + ZONE.yHigh && z < ez + ZONE.zNear && z > ez + ZONE.zFar;
@@ -87,6 +105,7 @@ export function findSteeringWheel(meshes: ArrayLike<number>[], eye: Vec3): Map<n
     const v = vertsOf(ids);
     const { mn, mx } = boxOf(v);
     const w = mx[0]! - mn[0]!, h = mx[1]! - mn[1]!;
+    debug?.push({ n: ids.length, mn: mn.map((x) => +x.toFixed(3)), mx: mx.map((x) => +x.toFixed(3)) });
     const cx = (mn[0]! + mx[0]!) / 2;
     if (w < RIM.min || w > RIM.max || h < RIM.min * 0.8 || h > RIM.max) continue;
     if (Math.abs(cx - ex) > RIM.offCentre) continue;
@@ -103,7 +122,9 @@ export function findSteeringWheel(meshes: ArrayLike<number>[], eye: Vec3): Map<n
   if (!rim) return null;
 
   // 4. Pieces lying on the rim's plane inside its circle (spokes, hub, badge, buttons).
-  const axis = wheelAxle(rim.v);
+  const pca = wheelAxle(rim.v);
+  const [ax, ay, az] = columnAxis([pca.x, pca.y, pca.z]);
+  const axis = { x: ax, y: ay, z: az };
   const { mn, mx } = boxOf(rim.v);
   const c = [(mn[0]! + mx[0]!) / 2, (mn[1]! + mx[1]!) / 2, (mn[2]! + mx[2]!) / 2];
   const radius = Math.max(mx[0]! - mn[0]!, mx[1]! - mn[1]!) / 2 + 0.02;
@@ -128,5 +149,5 @@ export function findSteeringWheel(meshes: ArrayLike<number>[], eye: Vec3): Map<n
     if (!list) out.set(mesh, (list = []));
     list.push(tri);
   }
-  return out;
+  return { tris: out, axis: [ax, ay, az] };
 }
