@@ -8,7 +8,7 @@ export type Vec3 = [number, number, number];
 /** Where a steering wheel can sit relative to the driver's eyes. */
 const ZONE = { x: 0.34, yLow: -0.7, yHigh: 0.05, zNear: -0.12, zFar: -1.0 };
 /** Plausible rim: 28–46 cm across, centred near the driver's line. */
-const RIM = { min: 0.27, max: 0.47, offCentre: 0.14 };
+const RIM = { min: 0.27, max: 0.47, offCentre: 0.14, maxDepth: 0.24 };
 
 type Tri = { mesh: number; tri: number };
 
@@ -109,6 +109,8 @@ export function findSteeringWheel(
     const cx = (mn[0]! + mx[0]!) / 2;
     if (w < RIM.min || w > RIM.max || h < RIM.min * 0.8 || h > RIM.max) continue;
     if (Math.abs(cx - ex) > RIM.offCentre) continue;
+    // A rim tilted on its column is shallow front-to-back.
+    if (mx[2]! - mn[2]! > RIM.maxDepth) continue;
     // Round and hollow: a rim's vertices sit near its outline, not its middle.
     const cy = (mn[1]! + mx[1]!) / 2;
     let ring = 0;
