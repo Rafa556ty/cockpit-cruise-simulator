@@ -32,7 +32,6 @@ export const hasCockpit = (car: PlayerCar) => COCKPIT_SEATS[car] !== undefined;
 const STEERING_PARTS: Partial<Record<PlayerCar, { node?: RegExp; material?: RegExp }>> = {
   revuelto: { material: /^Steering_wheel$/ },
   "chiron-ss300": { node: /(^|\|)SteeringWheel_/ },
-  jesko: { material: /^(alca_steer|steer_center)$/ },
 };
 
 export function isSteeringPart(car: string, nodeName: string, materialName: string): boolean {

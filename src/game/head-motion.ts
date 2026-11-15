@@ -47,6 +47,7 @@ export type HeadInput = {
 };
 
 const G = 9.81;
+const SUBSTEP = 1 / 240;
 
 export function stepHeadMotion(h: HeadMotion, i: HeadInput): HeadMotion {
   const dt = Math.min(i.dt, 0.05);
@@ -62,20 +63,25 @@ export function stepHeadMotion(h: HeadMotion, i: HeadInput): HeadMotion {
   const tx = clamp(-latG * HEAD.LAT_PER_G, -HEAD.MAX_LAT, HEAD.MAX_LAT);
   // longG < 0 (braking) → tz < 0 (forward); longG > 0 (accel) → tz > 0 (pressed back).
   const tz = clamp(longG * HEAD.LONG_PER_G, -HEAD.MAX_LONG, HEAD.MAX_BACK);
-  const vx = h.vx + (HEAD.STIFF * (tx - h.x) - HEAD.DAMP * h.vx) * dt;
-  const vz = h.vz + (HEAD.STIFF * (tz - h.z) - HEAD.DAMP * h.vz) * dt;
-  const x = h.x + vx * dt;
-  // Hard stop at the headrest: the spring can't overshoot into the seat.
-  const z = Math.min(HEAD.MAX_BACK, h.z + vz * dt);
-
-  // Seat bounce: road buzz grows with speed, shake adds a sharper jolt.
-  const t = h.t + dt;
+  // Fixed small substeps keep the springs stable on slow phones (dt up to 50 ms).
+  const steps = Math.ceil(dt / SUBSTEP);
+  const sdt = dt / steps;
+  let { x, vx, z, vz, y, vy, t } = h;
   const speedK = Math.min(1, i.speedKmh / 320);
-  const buzz = HEAD.BUZZ * speedK * (Math.sin(t * 37.1) * 0.6 + Math.sin(t * 23.3 + 1.3) * 0.4);
-  const jolt = HEAD.BUMP * i.shake * Math.sin(t * 61.7);
-  const ty = buzz + jolt;
-  const vy = h.vy + (420 * (ty - h.y) - 30 * h.vy) * dt;
-  const y = h.y + vy * dt;
+  for (let n = 0; n < steps; n++) {
+    vx += (HEAD.STIFF * (tx - x) - HEAD.DAMP * vx) * sdt;
+    vz += (HEAD.STIFF * (tz - z) - HEAD.DAMP * vz) * sdt;
+    x += vx * sdt;
+    // Hard stop at the headrest: the spring can't overshoot into the seat.
+    z = Math.min(HEAD.MAX_BACK, z + vz * sdt);
+    if (z >= HEAD.MAX_BACK && vz > 0) vz = 0;
+    // Seat bounce: road buzz grows with speed, shake adds a sharper jolt.
+    t += sdt;
+    const buzz = HEAD.BUZZ * speedK * (Math.sin(t * 37.1) * 0.6 + Math.sin(t * 23.3 + 1.3) * 0.4);
+    const jolt = HEAD.BUMP * i.shake * Math.sin(t * 61.7);
+    vy += (420 * (buzz + jolt - y) - 30 * vy) * sdt;
+    y += vy * sdt;
+  }
 
   // Eyes glance into the turn (three.js +yaw = left, so right steer is negative).
   const lookTarget = -clamp(i.steer, -1, 1) * HEAD.LOOK_INTO_TURN * (0.35 + 0.65 * Math.min(1, i.speedKmh / 60));
