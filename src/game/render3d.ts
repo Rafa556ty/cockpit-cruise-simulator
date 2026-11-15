@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { applyCarCustom } from "./car-paint";
 import { loadCustom } from "./car-custom";
 import { initialBodyMotion, stepBodyMotion, type BodyMotion } from "./body-motion";
+import { initialHeadMotion, stepHeadMotion, type HeadMotion } from "./head-motion";
 import { contactTexture, loadRoadLighting } from "./road-lighting";
 import { shadowOffset } from "./device-ui";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
@@ -393,6 +394,9 @@ export class Scene3D {
   private playerBrakeOnly: THREE.MeshStandardMaterial[] = [];
   private playerWheels: { mesh: THREE.Mesh; radius: number; front?: boolean }[] = [];
   private body: BodyMotion = initialBodyMotion();
+  private head: HeadMotion = initialHeadMotion();
+  private headEuler = new THREE.Euler(0, 0, 0, "YXZ");
+  private headQuat = new THREE.Quaternion();
   private engineBrakeLight: THREE.Mesh | null = null;
   private rimWarm = new THREE.DirectionalLight(0xffb347, 1.5);
   private rimCool = new THREE.DirectionalLight(0x7fb2ff, 0.8);
@@ -1756,19 +1760,32 @@ export class Scene3D {
     const view: CameraView = this.camView === "cockpit" && !seat ? "hood" : this.camView;
     const pose = view === "chase" || view === "cockpit" ? null : CAMERA_POSES[view];
     if (seat && this.player) {
-      // Driver's eyes ride with the car (yaw, roll, pitch); the horizon stays level.
+      // Driver's head on a neck spring: g-forces sway it, the eyes glance into
+      // the turn, the seat buzzes with speed. The eyes ride with the car's
+      // yaw and pitch and take only part of its roll, like a real neck does.
       const p = this.player;
       p.updateMatrixWorld();
+      this.head = stepHeadMotion(this.head, {
+        rot: s.player.rot,
+        speedKmh: s.player.speed,
+        steer: s.steer ?? 0,
+        braking: s.braking,
+        shake: Math.min(1, s.shake),
+        dt,
+      });
+      const h = this.head;
       const [ex, ey, ez] = seat.eye;
-      this.eyeVector.set(ex, ey, ez).applyMatrix4(p.matrixWorld);
-      this.lookVector.set(ex, ey - (seat.drop ?? 0.9), ez - 30).applyMatrix4(p.matrixWorld);
-      const jolt = sh * 0.15;
-      this.camera.position.set(
-        this.eyeVector.x + (Math.random() - 0.5) * jolt,
-        this.eyeVector.y + (Math.random() - 0.5) * jolt,
-        this.eyeVector.z,
-      );
+      this.eyeVector.set(ex + h.x, ey + h.y, ez + h.z).applyMatrix4(p.matrixWorld);
+      this.lookVector.set(ex + h.x, ey + h.y - (seat.drop ?? 0.9), ez + h.z - 30).applyMatrix4(p.matrixWorld);
+      this.camera.position.copy(this.eyeVector);
+      this.camera.up.set(0, 1, 0);
       this.camera.lookAt(this.lookVector);
+      // Head roll = part of the body roll + the head's own tilt; then the glance and nod.
+      this.headEuler.set(h.pitch, h.yaw, this.body.roll * 0.45 + h.roll);
+      this.camera.quaternion.multiply(this.headQuat.setFromEuler(this.headEuler));
+      if (import.meta.env.DEV) {
+        this.canvas.dataset["head"] = `${h.x.toFixed(3)},${h.z.toFixed(3)},${h.yaw.toFixed(3)}`;
+      }
     } else if (!pose) {
       this.camera.position.set(
         this.camX * 0.9 + (Math.random() - 0.5) * sh,
