@@ -817,10 +817,13 @@ export function loadCar(key: ModelKey): Promise<THREE.Group> {
           }
         });
         if (key === "bugatti") return splitBugattiWing(normalizeCar(scene, spec));
-        if (key === "chiron")
-          return splitBugattiWing(normalizeCar(scene, spec), isChironSpoiler, (o) =>
+        if (key === "chiron") {
+          const chiron = splitBugattiWing(normalizeCar(scene, spec), isChironSpoiler, (o) =>
             /tyre|rim/i.test((o.material as THREE.Material).name),
           );
+          cutBakedSteeringWheel(chiron, key);
+          return chiron;
+        }
         // Revuelto wheels (tyre, rim, rotor, logo) stay unmerged so they can
         // spin; the caliper is bolted to the upright and does not turn.
         if (key === "chiron-ss300") dropGroundPlane(scene);
