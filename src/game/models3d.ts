@@ -635,7 +635,8 @@ function cutBakedSteeringWheel(car: THREE.Group, key: ModelKey) {
   for (const o of car.children) {
     const m = o as THREE.Mesh;
     if (!m.isMesh || m.userData["wheel"] || Array.isArray(m.material) || m.geometry.index) continue;
-    if (m.position.lengthSq() > 0 || (m.material as THREE.Material).transparent) continue;
+    // Alpha-cut interior atlases are flagged transparent too; only skip see-through glass.
+    if (m.position.lengthSq() > 0 || (m.material as THREE.Material).opacity < 0.9) continue;
     meshes.push(m);
   }
   const found = findSteeringWheel(
