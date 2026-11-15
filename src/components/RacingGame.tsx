@@ -373,6 +373,9 @@ export function RacingGame() {
             sim: (seconds: number) => engine.debugSim(seconds),
             input: engine.input,
             engine,
+            get scene() {
+              return scene3dRef.current;
+            },
             setZ: (z: number) => {
               (engine as unknown as { pz: number }).pz = z;
             },
