@@ -16,7 +16,8 @@ type Tri = { mesh: number; tri: number };
  * `meshes` holds non-indexed xyz triplets per mesh (3 vertices per triangle).
  * Returns the triangles of the wheel per mesh index, or null when no rim is found.
  */
-export type WheelCut = { tris: Map<number, number[]>; axis: Vec3 };
+/** Triangles per mesh, the column axis (towards the driver) and the rim's centre. */
+export type WheelCut = { tris: Map<number, number[]>; axis: Vec3; center: Vec3 };
 
 /** Column axis (towards the driver) used when the rim's own plane is unclear. */
 export const DEFAULT_COLUMN_TILT = 0.36; // rad from horizontal
@@ -165,5 +166,5 @@ export function findSteeringWheel(
     if (!list) out.set(mesh, (list = []));
     list.push(tri);
   }
-  return { tris: out, axis: [ax, ay, az] };
+  return { tris: out, axis: [ax, ay, az], center: [c[0]!, c[1]!, c[2]!] };
 }

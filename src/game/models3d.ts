@@ -574,13 +574,14 @@ function batchCar(
  * One "steering-wheel" group pivoted on the rim's centre, so the cockpit view
  * can turn it about its own column (`userData.axis`, pointing at the driver).
  */
-function buildSteeringWheel(parts: THREE.Mesh[], knownAxis?: THREE.Vector3): THREE.Group {
+function buildSteeringWheel(parts: THREE.Mesh[], knownAxis?: THREE.Vector3, knownCenter?: THREE.Vector3): THREE.Group {
   const box = new THREE.Box3();
   for (const p of parts) {
     p.geometry.computeBoundingBox();
     box.union(p.geometry.boundingBox!);
   }
-  const center = box.getCenter(new THREE.Vector3());
+  // Pivot on the rim's own centre: extra pieces (paddles, a column stub) would shift a box centre.
+  const center = knownCenter ?? box.getCenter(new THREE.Vector3());
   const biggest = parts.reduce((a, b) =>
     b.geometry.getAttribute("position").count > a.geometry.getAttribute("position").count ? b : a,
   );
@@ -656,7 +657,7 @@ function cutBakedSteeringWheel(car: THREE.Group, key: ModelKey) {
     mesh.geometry = pickTriangles(geo, keep);
     geo.dispose();
   }
-  car.add(buildSteeringWheel(parts, new THREE.Vector3(...found.axis)));
+  car.add(buildSteeringWheel(parts, new THREE.Vector3(...found.axis), new THREE.Vector3(...found.center)));
 }
 
 /**
