@@ -24,9 +24,9 @@ export const HEAD = {
   STIFF: 55, // neck spring (1/s²)
   DAMP: 11, // neck damping (1/s)
   LAT_PER_G: 0.045, // m of sideways sway per g
-  LONG_PER_G: 0.06, // m of fore/aft sway per g
+  LONG_PER_G: 0.045, // m of fore/aft sway per g
   MAX_LAT: 0.07,
-  MAX_LONG: 0.08,
+  MAX_LONG: 0.06,
   LOOK_INTO_TURN: 0.16, // rad of glance at full steer
   LOOK_RATE: 4.5, // how fast the eyes follow (1/s)
   TILT_PER_M: 0.9, // rad of head tilt per metre of sway
